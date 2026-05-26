@@ -523,6 +523,12 @@ export default {
   'sessionBilling.title': 'Your usage limits',
   'sessionBilling.description':
     'Token usage is metered per session and per week. Peak hours (5–11 AM PT) count at double weight.',
+  'sessionBilling.cardTitle': 'Session Usage',
+  'sessionBilling.cardSubtitle': 'Track your daily and weekly session time',
+  'sessionBilling.currentSession': 'Current Session',
+  'sessionBilling.weeklyOverview': 'Weekly Overview',
+  'sessionBilling.weeklyTotal': 'Weekly Total',
+  'sessionBilling.dailyAverage': 'Daily Average',
   'sessionBilling.sessionWindow': 'Current session (5-hour window)',
   'sessionBilling.weeklyWindow': 'Weekly usage',
   'sessionBilling.weeklyResets': 'Resets {{time}}',

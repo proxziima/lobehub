@@ -40,9 +40,16 @@ export const peakMultiplier = (date: Date): number => {
   return hour >= PEAK_START && hour < PEAK_END ? PEAK_MULTIPLIER() : 1;
 };
 
+export type DailyBreakdownItem = { date: string; weekday: string; tokens: number };
+
 export type BudgetSnapshot = {
   session: { used: number; limit: number; resetsAt: Date | null; isPeak: boolean };
-  weekly: { used: number; limit: number; resetsAt: Date };
+  weekly: {
+    used: number;
+    limit: number;
+    resetsAt: Date;
+    dailyBreakdown: DailyBreakdownItem[];
+  };
 };
 
 export const recordUsage = async (params: {
@@ -80,9 +87,10 @@ export const recordUsage = async (params: {
 
 export const getBudget = async (userId: string, db: LobeChatDatabase): Promise<BudgetSnapshot> => {
   const eventModel = new UsageEventModel(db, userId);
-  const [sessionWindow, weeklyWindow] = await Promise.all([
+  const [sessionWindow, weeklyWindow, dailyBreakdown] = await Promise.all([
     eventModel.getSessionWindow(),
     eventModel.getWeeklyWindow(),
+    eventModel.getDailyBreakdown(),
   ]);
 
   return {
@@ -93,6 +101,7 @@ export const getBudget = async (userId: string, db: LobeChatDatabase): Promise<B
       used: sessionWindow.used,
     },
     weekly: {
+      dailyBreakdown,
       limit: WEEKLY_LIMIT(),
       resetsAt: weeklyWindow.resetsAt,
       used: weeklyWindow.used,

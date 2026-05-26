@@ -1,4 +1,4 @@
-import { and, eq, gte, min, sum } from 'drizzle-orm';
+import { and, eq, gte, min, sql, sum } from 'drizzle-orm';
 
 import { usageEvents } from '../schemas/usageEvents';
 import type { LobeChatDatabase } from '../type';
@@ -47,6 +47,36 @@ export class UsageEventModel {
       : null;
 
     return { resetsAt, used: Number(row.total) };
+  };
+
+  getDailyBreakdown = async (): Promise<
+    Array<{ date: string; weekday: string; tokens: number }>
+  > => {
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay();
+    const lastSunday = new Date(now);
+    lastSunday.setUTCDate(now.getUTCDate() - dayOfWeek);
+    lastSunday.setUTCHours(0, 0, 0, 0);
+
+    const rows = await this.db
+      .select({
+        day: sql<string>`(${usageEvents.occurredAt} AT TIME ZONE 'UTC')::date::text`,
+        total: sum(usageEvents.weightedTokens),
+      })
+      .from(usageEvents)
+      .where(and(eq(usageEvents.userId, this.userId), gte(usageEvents.occurredAt, lastSunday)))
+      .groupBy(sql`(${usageEvents.occurredAt} AT TIME ZONE 'UTC')::date`)
+      .orderBy(sql`(${usageEvents.occurredAt} AT TIME ZONE 'UTC')::date`);
+
+    const map = new Map(rows.map((r) => [r.day, Number(r.total ?? 0)]));
+
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(lastSunday);
+      d.setUTCDate(lastSunday.getUTCDate() + i);
+      const date = d.toISOString().slice(0, 10);
+      return { date, tokens: map.get(date) ?? 0, weekday: weekdays[i] };
+    });
   };
 
   getWeeklyWindow = async (): Promise<{ used: number; resetsAt: Date }> => {

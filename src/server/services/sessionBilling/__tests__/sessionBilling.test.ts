@@ -155,7 +155,7 @@ describe('assertBudget boundary (SESSION_BILLING_ENABLED)', () => {
     await expect(
       assertBudget('user', {
         session: { used: 999, limit: 1000, resetsAt: null, isPeak: false },
-        weekly: { used: 0, limit: 5000, resetsAt: new Date() },
+        weekly: { used: 0, limit: 5000, resetsAt: new Date(), dailyBreakdown: [] },
       }),
     ).resolves.toBeUndefined();
   });
@@ -165,7 +165,7 @@ describe('assertBudget boundary (SESSION_BILLING_ENABLED)', () => {
     await expect(
       assertBudget('any-user', {
         session: { used: 999_999, limit: 1000, resetsAt: null, isPeak: false },
-        weekly: { used: 999_999, limit: 5000, resetsAt: new Date() },
+        weekly: { used: 999_999, limit: 5000, resetsAt: new Date(), dailyBreakdown: [] },
       }),
     ).resolves.toBeUndefined();
   });
@@ -174,7 +174,7 @@ describe('assertBudget boundary (SESSION_BILLING_ENABLED)', () => {
     await expect(
       assertBudget('user', {
         session: { used: 1000, limit: 1000, resetsAt: null, isPeak: false },
-        weekly: { used: 0, limit: 5000, resetsAt: new Date() },
+        weekly: { used: 0, limit: 5000, resetsAt: new Date(), dailyBreakdown: [] },
       }),
     ).resolves.toBeUndefined();
   });
@@ -183,7 +183,7 @@ describe('assertBudget boundary (SESSION_BILLING_ENABLED)', () => {
     await expect(
       assertBudget('user', {
         session: { used: 1001, limit: 1000, resetsAt: new Date(), isPeak: false },
-        weekly: { used: 0, limit: 5000, resetsAt: new Date() },
+        weekly: { used: 0, limit: 5000, resetsAt: new Date(), dailyBreakdown: [] },
       }),
     ).rejects.toMatchObject({
       code: 'FORBIDDEN',
@@ -194,7 +194,7 @@ describe('assertBudget boundary (SESSION_BILLING_ENABLED)', () => {
     await expect(
       assertBudget('user', {
         session: { used: 0, limit: 1000, resetsAt: null, isPeak: false },
-        weekly: { used: 5001, limit: 5000, resetsAt: new Date() },
+        weekly: { used: 5001, limit: 5000, resetsAt: new Date(), dailyBreakdown: [] },
       }),
     ).rejects.toMatchObject({
       code: 'FORBIDDEN',
