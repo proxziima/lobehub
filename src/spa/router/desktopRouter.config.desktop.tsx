@@ -92,6 +92,7 @@ import SettingsTabPage from '@/routes/(main)/settings';
 import SettingsLayout from '@/routes/(main)/settings/_layout';
 import { settingsRouteMeta } from '@/routes/(main)/settings/features/routeMeta';
 import { ProviderDetailPage, ProviderLayout } from '@/routes/(main)/settings/provider';
+import SettingsUsagePage from '@/routes/(main)/settings/usage/page';
 import TaskDetailRoute from '@/routes/(main)/task/[taskId]';
 import AllTasksPage from '@/routes/(main)/tasks';
 import ShareTopicPage from '@/routes/share/t/[id]';
@@ -388,6 +389,12 @@ export const desktopRoutes: RouteObject[] = [
               meta: routeMeta({ icon: Settings, titleKey: 'navigation.provider' }),
             },
             path: 'provider',
+          },
+          // Session billing usage limits page
+          {
+            element: <SettingsUsagePage />,
+            handle: { meta: settingsRouteMeta },
+            path: 'usage',
           },
           // Other settings tabs
           {

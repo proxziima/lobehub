@@ -12,7 +12,7 @@ import { MessageModel } from '@/database/models/message';
 import { ThreadModel } from '@/database/models/thread';
 import { TopicModel } from '@/database/models/topic';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
-import { serverDatabase } from '@/libs/trpc/lambda/middleware';
+import { serverDatabase, sessionLimitGuard } from '@/libs/trpc/lambda/middleware';
 import { resolveContext } from '@/server/routers/lambda/_helpers/resolveContext';
 import { AiChatService } from '@/server/services/aiChat';
 import { AiGenerationService } from '@/server/services/aiGeneration';
@@ -24,21 +24,24 @@ const { createPrefixedTimingContext, logTiming, runTimedStage } = createTimingHe
   'lobe-server:chat:lobehub:timing',
 );
 
-const aiChatProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
-  const { ctx } = opts;
+const aiChatProcedure = authedProcedure
+  .use(serverDatabase)
+  .use(sessionLimitGuard)
+  .use(async (opts) => {
+    const { ctx } = opts;
 
-  return opts.next({
-    ctx: {
-      agentModel: new AgentModel(ctx.serverDB, ctx.userId),
-      aiChatService: new AiChatService(ctx.serverDB, ctx.userId),
-      aiGenerationService: new AiGenerationService(ctx.serverDB, ctx.userId),
-      fileService: new FileService(ctx.serverDB, ctx.userId),
-      messageModel: new MessageModel(ctx.serverDB, ctx.userId),
-      threadModel: new ThreadModel(ctx.serverDB, ctx.userId),
-      topicModel: new TopicModel(ctx.serverDB, ctx.userId),
-    },
+    return opts.next({
+      ctx: {
+        agentModel: new AgentModel(ctx.serverDB, ctx.userId),
+        aiChatService: new AiChatService(ctx.serverDB, ctx.userId),
+        aiGenerationService: new AiGenerationService(ctx.serverDB, ctx.userId),
+        fileService: new FileService(ctx.serverDB, ctx.userId),
+        messageModel: new MessageModel(ctx.serverDB, ctx.userId),
+        threadModel: new ThreadModel(ctx.serverDB, ctx.userId),
+        topicModel: new TopicModel(ctx.serverDB, ctx.userId),
+      },
+    });
   });
-});
 
 export const aiChatRouter = router({
   outputJSON: aiChatProcedure.input(StructureOutputSchema).mutation(async ({ input, ctx }) => {

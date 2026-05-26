@@ -28,5 +28,6 @@ export * from './session';
 export * from './systemBotProvider';
 export * from './task';
 export * from './topic';
+export * from './usageEvents';
 export * from './user';
 export * from './userMemories';

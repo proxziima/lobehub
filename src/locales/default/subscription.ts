@@ -519,4 +519,17 @@ export default {
   'zarinpal.infoModal.phone.rule': 'Please enter a valid phone number',
   'zarinpal.infoModal.submit': 'Purchase',
   'zarinpal.infoModal.title': 'Fill in Required Information',
+
+  'sessionBilling.title': 'Your usage limits',
+  'sessionBilling.description':
+    'Token usage is metered per session and per week. Peak hours (5–11 AM PT) count at double weight.',
+  'sessionBilling.sessionWindow': 'Current session (5-hour window)',
+  'sessionBilling.weeklyWindow': 'Weekly usage',
+  'sessionBilling.weeklyResets': 'Resets {{time}}',
+  'sessionBilling.resetsIn': 'Resets in {{time}}',
+  'sessionBilling.used': 'used',
+  'sessionBilling.peak': 'Peak hours',
+  'sessionBilling.limitReached': 'Usage limit reached',
+  'sessionBilling.limitReachedDesc':
+    'Your token budget has been exhausted. Please wait for the window to reset.',
 };

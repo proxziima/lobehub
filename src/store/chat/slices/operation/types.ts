@@ -148,9 +148,15 @@ export interface OperationMetadata {
     total: number;
     percentage?: number;
   };
-
   // Runtime hooks (collected during execution, executed after completion)
   runtimeHooks?: RuntimeHooks;
+
+  sessionLimitError?: {
+    code: string;
+    limit: number;
+    resetsAt: string | null;
+    used: number;
+  };
 
   // Performance information
   startTime: number;

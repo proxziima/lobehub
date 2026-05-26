@@ -364,6 +364,35 @@ export function defineConfig(config: CustomNextConfig) {
     ],
 
     transpilePackages: ['mermaid', 'better-auth-harmony'],
+
+    webpack: (config, { dev }) => {
+      if (dev) {
+        config.watchOptions = {
+          ...config.watchOptions,
+          ignored: [
+            '**/node_modules/**',
+            '**/.git/**',
+            '**/.codegraph/**',
+            '**/dist/**',
+            '**/.next/**',
+            '**/coverage/**',
+            '**/e2e/**',
+            '**/apps/desktop/**',
+            '**/apps/cli/**',
+            '**/apps/device-gateway/**',
+            '**/packages/database/migrations/**',
+            '**/packages/chat-adapter-feishu/**',
+            '**/packages/chat-adapter-line/**',
+            '**/packages/chat-adapter-qq/**',
+            '**/packages/chat-adapter-wechat/**',
+            '**/packages/eval-dataset-parser/**',
+            '**/packages/eval-rubric/**',
+          ],
+        };
+      }
+      return config;
+    },
+
     turbopack: {
       rules: {
         ...(isTest

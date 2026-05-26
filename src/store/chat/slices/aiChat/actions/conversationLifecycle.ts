@@ -23,9 +23,11 @@ import type {
 import { nanoid } from '@lobechat/utils';
 import { TRPCClientError } from '@trpc/client';
 import { t } from 'i18next';
+import { mutate as swrMutate } from 'swr';
 
 import { markUserValidAction } from '@/business/client/markUserValidAction';
 import { message as antdMessage } from '@/components/AntdStaticMethods';
+import { BUDGET_SWR_KEY } from '@/features/SessionUsage/useBudget';
 import { agentService } from '@/services/agent';
 import { aiChatService } from '@/services/aiChat';
 import { chatService } from '@/services/chat';
@@ -647,6 +649,7 @@ export class ConversationLifecycleActionImpl {
 
       if (heteroData.topicId) this.#get().internal_updateTopicLoading(heteroData.topicId, false);
 
+      swrMutate(BUDGET_SWR_KEY).catch(() => {});
       return {
         assistantMessageId: heteroData.assistantMessageId,
         userMessageId: heteroData.userMessageId,
@@ -669,6 +672,7 @@ export class ConversationLifecycleActionImpl {
           parentOperationId: operationId,
         });
 
+        swrMutate(BUDGET_SWR_KEY).catch(() => {});
         return {
           assistantMessageId: result.assistantMessageId,
           userMessageId: result.userMessageId,
@@ -865,12 +869,21 @@ export class ConversationLifecycleActionImpl {
         const isAbort = e.message.includes('aborted') || e.name === 'AbortError';
         // Check if error is due to cancellation
         if (!isAbort) {
-          this.#get().updateOperationMetadata(operationId, { inputSendErrorMsg: e.message });
-          const op = this.#get().operations[operationId];
-          if (op?.metadata.inputEditorTempState) {
-            this.#get().mainInputEditor?.setJSONState(op.metadata.inputEditorTempState);
+          const errorData = e.data?.errorData as
+            | { code: string; limit: number; resetsAt: string | null; used: number }
+            | undefined;
+
+          if (errorData?.code === 'SESSION_LIMIT_EXCEEDED') {
+            this.#get().updateOperationMetadata(operationId, { sessionLimitError: errorData });
+            swrMutate(BUDGET_SWR_KEY).catch(() => {});
           } else {
-            this.#get().mainInputEditor?.setDocument('markdown', message);
+            this.#get().updateOperationMetadata(operationId, { inputSendErrorMsg: e.message });
+            const op = this.#get().operations[operationId];
+            if (op?.metadata.inputEditorTempState) {
+              this.#get().mainInputEditor?.setJSONState(op.metadata.inputEditorTempState);
+            } else {
+              this.#get().mainInputEditor?.setDocument('markdown', message);
+            }
           }
         }
       }
@@ -1061,6 +1074,7 @@ export class ConversationLifecycleActionImpl {
         console.error(e);
       } finally {
         if (data.topicId) this.#get().internal_updateTopicLoading(data.topicId, false);
+        swrMutate(BUDGET_SWR_KEY).catch(() => {});
       }
     }
 

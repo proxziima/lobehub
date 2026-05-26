@@ -1,0 +1,172 @@
+# Session Billing — UI Wiring & Error Propagation Fixes
+
+Close the gap between the session-billing backend (implemented on `session-managemen`) and the
+user-facing surfaces it was designed to power. The backend infrastructure — schema, migration,
+model, billing service, tRPC middleware, and route scaffolding — is complete and correct. Three
+integration points are missing or broken before the feature can be shipped.
+
+---
+
+## Problem Statement
+
+Users who hit their session or weekly token budget receive no visual feedback. The token meter in
+the sidebar never appears, the blocked-state banner below the chat input never renders, and the
+"Session Limit Exceeded" error returned by the server carries a payload that is silently dropped
+before it reaches the client. The billing feature is live in the runtime but invisible to the user.
+
+---
+
+## Solution
+
+Wire the three already-built UI components into the app shell, fix the error serialisation so the
+banner receives the reset timestamp it needs, and add on-demand SWR revalidation so the meter
+updates immediately after each message rather than waiting up to 60 seconds.
+
+---
+
+## User Stories
+
+1. As a user, I want a subtle usage meter in the sidebar footer so that I can see how much of my
+   session and weekly token budget I have consumed without navigating away.
+2. As a user, I want the sidebar meter to stay hidden when my usage is low so that it doesn't
+   clutter the UI during normal usage.
+3. As a user, I want the sidebar meter to appear automatically when I have used 80% or more of
+   either budget so that I have advance warning before being blocked.
+4. As a user, I want to see two distinct progress bars — one for the 5-hour rolling window and one
+   for the weekly window — so that I understand which limit is constraining me.
+5. As a user, I want to see when my session budget resets so that I know how long I have to wait.
+6. As a user, I want the sidebar meter to update shortly after I send a message so that the usage
+   figure reflects my latest turn.
+7. As a user, I want a clear blocked-state banner below the chat input when I have exceeded my
+   limit so that I understand why my message cannot be sent.
+8. As a user, I want the blocked banner to show a countdown to the reset time so that I know
+   exactly when I can resume.
+9. As a user, I want the send button to be disabled while the blocked banner is visible so that I
+   cannot accidentally submit a message that will immediately fail.
+10. As a user, I want the send button to re-enable automatically when the budget resets so that I
+    do not have to refresh the page.
+11. As a user, I want to navigate to `/settings/usage` and see my full usage breakdown so that I
+    can review my consumption in detail.
+12. As a developer, I want the `SESSION_LIMIT_EXCEEDED` error to carry `{ code, resetsAt, used,
+    limit }` through the tRPC error formatter so that UI components can display accurate
+    information without making additional API calls.
+13. As an operator, I want the billing feature to have no visible effect when
+    `SESSION_BILLING_ENABLED` is `false` so that self-hosted deployments are unaffected.
+
+---
+
+## Implementation Decisions
+
+### 1. Fix `SessionLimitExceededError` payload serialisation
+
+The tRPC `errorFormatter` in the lambda init reads `error.cause.data` to populate `errorData` in
+the response shape. `SessionLimitExceededError` currently stores its payload directly on `cause`
+(not under `cause.data`), so the `'data' in error.cause` guard always fails and the payload is
+dropped.
+
+Fix: wrap the billing payload one level deeper so it matches what the formatter expects:
+
+```ts
+// Before
+cause: { code: 'SESSION_LIMIT_EXCEEDED', limit, resetsAt, used }
+
+// After
+cause: { data: { code: 'SESSION_LIMIT_EXCEEDED', limit, resetsAt, used } }
+```
+
+No changes to the `errorFormatter` itself — it already handles this shape for other error types.
+
+### 2. Mount `SidebarUsageMeter` in the sidebar footer
+
+`SideBarLayout` currently accepts `header` and `body` props. Add a `footer` prop (optional
+`ReactNode`) rendered below the body, outside the scroll container, so the meter stays anchored
+at the bottom of the sidebar regardless of list length.
+
+`SidebarContent` (the home route's sidebar composition) passes `<SidebarUsageMeter />` as the
+new `footer` prop. The component already gates its own visibility on `used / limit >= 0.8`, so it
+self-hides when usage is low.
+
+### 3. Mount `ChatUsageBanner` in the desktop conversation layout
+
+`ChatUsageBanner` should render between the chat input and the conversation body — visible above
+the input box, full-width — when `assertBudget` returns `SESSION_LIMIT_EXCEEDED`.
+
+The natural injection point is the caller of `DesktopChatInput` in the desktop conversation
+route. Callers already compose the full page layout; adding `<ChatUsageBanner />` just above
+`<DesktopChatInput />` keeps billing concerns out of the reusable input component.
+
+The banner's `disabled` state should be forwarded to the send button via the existing
+`useChatInputStore` mechanism (e.g. a `blocked` flag) so that the `SendButton` disables itself
+without needing direct prop-drilling through `DesktopChatInput`.
+
+### 4. On-demand SWR revalidation after each message
+
+`useBudget` currently polls every 60 seconds. To update the meter immediately after a completed
+turn, the hook must export the SWR `mutate` function. The chat store's stream-completion path
+(wherever it marks the assistant message as done) should call `mutateBudget()` as a side effect.
+
+The 60-second background poll remains as-is for the case where the user has multiple tabs open.
+
+### 5. Error data shape consumed by `ChatUsageBanner`
+
+`ChatUsageBanner` should read `errorData` from the tRPC error response:
+
+```ts
+type SessionLimitExceededData = {
+  code: 'SESSION_LIMIT_EXCEEDED';
+  resetsAt: string | null;   // ISO date string
+  used: number;
+  limit: number;
+};
+```
+
+The banner renders a countdown from `resetsAt` using a local interval or `date-fns/formatDistance`.
+When `resetsAt` is `null` (no prior events in the session window) it shows a generic "Limit reached"
+message without a countdown.
+
+---
+
+## Testing Decisions
+
+Good tests check external behaviour only — what the component or function produces given specific
+inputs — not implementation details like which internal helper was called.
+
+### What to test
+
+| Module                      | Cases                                                                                                                                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SessionLimitExceededError` | Constructed instance has `cause.data.code === 'SESSION_LIMIT_EXCEEDED'`; `cause.data.resetsAt` is ISO string or `null`; `cause.data.used` and `cause.data.limit` match constructor params |
+| `SideBarLayout`             | Renders `footer` slot when prop is provided; does not render footer when omitted                                                                                                          |
+| `SidebarUsageMeter`         | Hidden when `used / limit < 0.8`; visible when `>= 0.8`; shows both session and weekly bars                                                                                               |
+| `ChatUsageBanner`           | Renders when error `code === SESSION_LIMIT_EXCEEDED`; shows countdown when `resetsAt` is set; shows generic message when `resetsAt` is `null`; send button disabled state propagates      |
+| `useBudget`                 | Exports a `mutate` function; calling it triggers a re-fetch                                                                                                                               |
+
+### Prior art in this codebase
+
+- Component rendering tests: `src/routes/(main)/agent/_layout/index.test.tsx` — pattern for shallow
+  render + store mock
+- SWR hook tests: search for `useSWR` + `vi.mock('swr')` patterns in existing hook tests
+- Error shape tests: existing tRPC error handling in `src/libs/trpc/`
+
+---
+
+## Out of Scope
+
+- Mobile layout: `ChatUsageBanner` mounting in the mobile chat input is deferred.
+- Per-model breakdown on the `/settings/usage` page (noted as v2 in the original spec).
+- Pre-flight token estimation to eliminate the one-turn lag (noted as v2).
+- Push notifications or email alerts when budget is near exhaustion.
+- Admin UI for viewing per-user usage across the platform.
+
+---
+
+## Further Notes
+
+The billing service tests at `src/server/services/sessionBilling/__tests__/sessionBilling.test.ts`
+already cover DST boundaries, `assertBudget` strict-`>` semantics, and `recordUsage` weighting.
+No new backend tests are needed — only the UI-side and error-shape assertions listed above.
+
+The `SESSION_BILLING_ENABLED` env var gate already threads through `sessionLimitGuard` and
+`getBudget`. The sidebar meter and chat banner should also respect this gate — return `null`
+early when `getBudget` returns `undefined` (which it will when billing is disabled, since the
+procedure short-circuits).

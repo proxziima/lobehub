@@ -38,6 +38,22 @@ const isCurrentSendMessageError = (s: ChatStoreState) => {
   return undefined;
 };
 
+const isCurrentSessionLimitError = (
+  s: ChatStoreState,
+): { code: string; limit: number; resetsAt: string | null; used: number } | undefined => {
+  const contextKey = messageMapKey({ agentId: s.activeAgentId, topicId: s.activeTopicId });
+  const operationIds = s.operationsByContext[contextKey] || [];
+
+  for (const opId of [...operationIds].reverse()) {
+    const op = s.operations[opId];
+    if (op && op.type === 'sendMessage' && op.metadata.sessionLimitError) {
+      return op.metadata.sessionLimitError;
+    }
+  }
+
+  return undefined;
+};
+
 const isSendMessageLoadingForTopic = (topicKey: string) => (s: ChatStoreState) => {
   const operationIds = s.operationsByContext[topicKey] || [];
 
@@ -51,6 +67,7 @@ const isSendMessageLoadingForTopic = (topicKey: string) => (s: ChatStoreState) =
 export const aiChatSelectors = {
   isCurrentSendMessageError,
   isCurrentSendMessageLoading,
+  isCurrentSessionLimitError,
   isIntentUnderstanding,
   isMessageInReasoning,
   isMessageInSearchWorkflow,

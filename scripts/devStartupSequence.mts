@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import dotenv from 'dotenv';
 import dotenvExpand from 'dotenv-expand';
 import net from 'node:net';
@@ -57,7 +58,7 @@ let shuttingDown = false;
 const runNpmScript = (scriptName: string) =>
   spawn(npmCommand, ['run', scriptName], {
     env: process.env,
-    stdio: 'inherit',
+    stdio: ['ignore', 'inherit', 'inherit'],
     shell: process.platform === 'win32',
   });
 
@@ -142,10 +143,11 @@ const main = async () => {
   process.once('SIGINT', () => shutdownAll('SIGINT'));
   process.once('SIGTERM', () => shutdownAll('SIGTERM'));
 
-  nextProcess = spawn('npx', ['next', 'dev', '-p', String(NEXT_PORT)], {
+  const require = createRequire(import.meta.url);
+  const nextBin = require.resolve('next/dist/bin/next');
+  nextProcess = spawn(process.execPath, [nextBin, 'dev', '-p', String(NEXT_PORT)], {
     env: process.env,
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
+    stdio: ['ignore', 'inherit', 'inherit'],
   });
   watchChildExit(nextProcess, 'next');
 

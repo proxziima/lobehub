@@ -11,6 +11,7 @@ import ChatMiniMap from '@/features/ChatMiniMap';
 import { ChatList, ConversationProvider } from '@/features/Conversation';
 import { useChatFollowUp } from '@/features/Conversation/hooks/useChatFollowUp';
 import { mergeConversationHooks } from '@/features/Conversation/utils/mergeConversationHooks';
+import { ChatUsageBanner } from '@/features/SessionUsage';
 import ZenModeToast from '@/features/ZenModeToast';
 import { useGatewayReconnect } from '@/hooks/useGatewayReconnect';
 import { useOperationState } from '@/hooks/useOperationState';
@@ -18,6 +19,7 @@ import { useAgentStore } from '@/store/agent';
 import { agentChatConfigSelectors, agentSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 import { threadSelectors, topicSelectors } from '@/store/chat/selectors';
+import { aiChatSelectors } from '@/store/chat/slices/aiChat/selectors';
 import { messageMapKey } from '@/store/chat/utils/messageMapKey';
 
 import HeterogeneousChatInput from './HeterogeneousChatInput';
@@ -64,6 +66,8 @@ const Conversation = memo(() => {
   // Subagent threads (spawned by an external agent's subagent tool call) are
   // read-only — the parent agent drives their execution, so hide the input.
   const isSubagentThread = useChatStore(threadSelectors.isActiveThreadSubagent);
+
+  const sessionLimitError = useChatStore(aiChatSelectors.isCurrentSessionLimitError);
 
   // Auto-reconnect to running Gateway operation on topic load
   const runningOperation = useChatStore((s) =>
@@ -131,7 +135,19 @@ const Conversation = memo(() => {
           }
         />
       </Flexbox>
-      {!isSubagentThread && (isHeterogeneousAgent ? <HeterogeneousChatInput /> : <MainChatInput />)}
+      {!isSubagentThread && sessionLimitError && (
+        <ChatUsageBanner
+          limit={sessionLimitError.limit}
+          resetsAt={sessionLimitError.resetsAt ? new Date(sessionLimitError.resetsAt) : null}
+          used={sessionLimitError.used}
+        />
+      )}
+      {!isSubagentThread &&
+        (isHeterogeneousAgent ? (
+          <HeterogeneousChatInput />
+        ) : (
+          <MainChatInput sendDisabled={!!sessionLimitError} />
+        ))}
       <ThreadHydration />
       <ChatMiniMap />
       <Suspense>

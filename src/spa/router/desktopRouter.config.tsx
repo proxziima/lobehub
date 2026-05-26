@@ -434,6 +434,15 @@ export const desktopRoutes: RouteObject[] = [
             },
             path: 'provider',
           },
+          // Session billing usage limits page
+          {
+            element: dynamicElement(
+              () => import('@/routes/(main)/settings/usage/page'),
+              'Desktop > Settings > Usage',
+            ),
+            handle: { meta: settingsRouteMeta },
+            path: 'usage',
+          },
           // Other settings tabs
           {
             element: dynamicElement(

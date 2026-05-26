@@ -77,6 +77,7 @@ import {
 import { FileService } from '@/server/services/file';
 import { MessageService } from '@/server/services/message';
 import { OnboardingService } from '@/server/services/onboarding';
+import { recordUsage } from '@/server/services/sessionBilling';
 import {
   type ToolExecutionResultResponse,
   type ToolExecutionService,
@@ -1223,6 +1224,17 @@ export const createRuntimeExecutors = (
 
                 newState.usage = usage;
                 if (cost) newState.cost = cost;
+
+                if (process.env.SESSION_BILLING_ENABLED === 'true' && ctx.userId && ctx.serverDB) {
+                  await recordUsage({
+                    db: ctx.serverDB,
+                    messageId: assistantMessageItem.id,
+                    model: llmPayload.model,
+                    modelUsage: currentStepUsage,
+                    provider: llmPayload.provider,
+                    userId: ctx.userId,
+                  });
+                }
               }
 
               // Propagate stepLabel from instruction to state metadata for hook consumers
@@ -1592,6 +1604,17 @@ export const createRuntimeExecutors = (
 
         newState.usage = usage;
         if (cost) newState.cost = cost;
+
+        if (process.env.SESSION_BILLING_ENABLED === 'true' && ctx.userId && ctx.serverDB) {
+          await recordUsage({
+            db: ctx.serverDB,
+            messageId: latestAssistantMessage?.id ?? '',
+            model: compressionModel.model,
+            modelUsage: summaryUsage,
+            provider: compressionModel.provider,
+            userId: ctx.userId,
+          });
+        }
       }
 
       events.push({

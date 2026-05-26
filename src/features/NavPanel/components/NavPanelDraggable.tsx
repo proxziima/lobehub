@@ -7,6 +7,7 @@ import { memo, Suspense, useMemo, useRef } from 'react';
 
 import { isDesktop } from '@/const/version';
 import { TOGGLE_BUTTON_ID } from '@/features/NavPanel/ToggleLeftPanelButton';
+import { SidebarUsageMeter } from '@/features/SessionUsage';
 import Footer from '@/routes/(main)/home/_layout/Footer';
 import { USER_DROPDOWN_ICON_ID } from '@/routes/(main)/home/_layout/Header/components/User';
 import { useGlobalStore } from '@/store/global';
@@ -155,6 +156,7 @@ export const NavPanelDraggable = memo<NavPanelDraggableProps>(({ activeContent }
           {activeContent.node}
         </div>
       </div>
+      <SidebarUsageMeter />
       <Suspense>
         <Footer />
       </Suspense>

@@ -38,6 +38,7 @@ import { t } from 'i18next';
 import pMap from 'p-map';
 
 import { LOADING_FLAT } from '@/const/message';
+import { lambdaClient } from '@/libs/trpc/client';
 import { aiAgentService } from '@/services/aiAgent';
 import { chatService } from '@/services/chat';
 import { type ResolvedAgentConfig } from '@/services/chat/mecha';
@@ -613,6 +614,15 @@ export const createAgentExecutors = (context: {
 
         newState.usage = usage;
         if (cost) newState.cost = cost;
+
+        lambdaClient.subscription.recordUsage
+          .mutate({
+            messageId: assistantMessageId,
+            model: llmPayload.model,
+            modelUsage: currentStepUsage,
+            provider: llmPayload.provider,
+          })
+          .catch(console.error);
       }
 
       // If operation was aborted, enter human_abort phase to let agent decide how to handle

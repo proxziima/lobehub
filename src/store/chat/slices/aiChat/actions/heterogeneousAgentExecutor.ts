@@ -25,6 +25,7 @@ import { createNanoId } from '@lobechat/utils';
 import { t } from 'i18next';
 
 import { message as antdMessage } from '@/components/AntdStaticMethods';
+import { lambdaClient } from '@/libs/trpc/client';
 import { heterogeneousAgentService } from '@/services/electron/heterogeneousAgent';
 import { messageService } from '@/services/message';
 import { threadService } from '@/services/thread';
@@ -1519,15 +1520,23 @@ export const executeHeterogeneousAgent = async (
         if (event.data.provider) lastProvider = event.data.provider;
         const turnUsage = event.data.usage;
         if (turnUsage) {
+          const messageId = currentAssistantMessageId;
+          const model = event.data.model || lastModel;
+          const provider = event.data.provider || lastProvider;
           persistQueue = persistQueue.then(async () => {
             await messageService
               .updateMessage(
-                currentAssistantMessageId,
+                messageId,
                 { metadata: { usage: turnUsage } },
                 { agentId: context.agentId, topicId: context.topicId },
               )
               .catch(console.error);
           });
+          if (model && provider) {
+            lambdaClient.subscription.recordUsage
+              .mutate({ messageId, model, modelUsage: turnUsage, provider })
+              .catch(console.error);
+          }
         }
         // Don't forward turn metadata — it's internal bookkeeping
         return;
