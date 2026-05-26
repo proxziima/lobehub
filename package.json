@@ -306,6 +306,8 @@
     "@trpc/next": "^11.8.1",
     "@trpc/react-query": "^11.8.1",
     "@trpc/server": "^11.8.1",
+    "@univerjs/preset-sheets-core": "^0.24.0",
+    "@univerjs/presets": "^0.24.0",
     "@upstash/qstash": "^2.8.4",
     "@upstash/workflow": "^0.2.23",
     "@vercel/analytics": "^1.6.1",

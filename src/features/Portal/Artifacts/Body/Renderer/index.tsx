@@ -7,12 +7,17 @@ import HTMLRenderer from './HTML';
 import SVGRender from './SVG';
 
 const ReactRenderer = dynamic(() => import('./React'), { ssr: false });
+const SpreadsheetRenderer = dynamic(() => import('./Spreadsheet'), { ssr: false });
 
 const Renderer = memo<{ animated?: boolean; content: string; type?: string }>(
   ({ animated, content, type }) => {
     switch (type) {
       case 'application/lobe.artifacts.react': {
         return <ReactRenderer code={content} />;
+      }
+
+      case 'application/lobe.artifacts.spreadsheet': {
+        return <SpreadsheetRenderer csv={content} />;
       }
 
       case 'image/svg+xml': {

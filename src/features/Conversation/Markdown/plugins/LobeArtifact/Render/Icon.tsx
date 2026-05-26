@@ -1,7 +1,7 @@
 import { SiReact } from '@icons-pack/react-simple-icons';
 import { Icon } from '@lobehub/ui';
 import { cssVar } from 'antd-style';
-import { CodeXml, GlobeIcon, ImageIcon, Loader2, OrigamiIcon } from 'lucide-react';
+import { CodeXml, GlobeIcon, ImageIcon, Loader2, OrigamiIcon, Sheet } from 'lucide-react';
 import { memo } from 'react';
 
 interface ArtifactProps {
@@ -24,6 +24,9 @@ const ArtifactIcon = memo<ArtifactProps>(({ type }) => {
 
     case 'image/svg+xml': {
       return <Icon icon={ImageIcon} size={SIZE} style={{ color: cssVar.colorTextSecondary }} />;
+    }
+    case 'application/lobe.artifacts.spreadsheet': {
+      return <Icon icon={Sheet} size={SIZE} style={{ color: cssVar.colorTextSecondary }} />;
     }
     case 'text/html': {
       return <Icon icon={GlobeIcon} size={SIZE} style={{ color: cssVar.colorTextSecondary }} />;

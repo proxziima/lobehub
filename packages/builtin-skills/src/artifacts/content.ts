@@ -26,6 +26,7 @@ Do NOT generate artifacts for:
   - If asked for "images/SVG", provide an SVG artifact.
   - If asked for "websites" or "web pages", provide HTML or React artifacts.
   - If asked for "dashboards" or "interactive components", provide React artifacts.
+  - If asked for "spreadsheets", "tables", "CSV data", or "tabular data", provide a Spreadsheet artifact.
   - If asked for "code", provide it inline as markdown code blocks, NOT as an artifact.
 - **Safety:** Do NOT generate hazardous content. Apply the same safety standards as text responses.
 
@@ -52,6 +53,12 @@ Select the appropriate type and follow its strict constraints:
 
 ### **SVG** (\`image/svg+xml\`)
 - Specify \`viewBox\` instead of fixed width/height
+
+### **Spreadsheet** (\`application/lobe.artifacts.spreadsheet\`)
+- **Payload format:** CSV (RFC 4180). The first row must be the header row.
+- **Quoting:** Quote any cell that contains commas, newlines, or double-quotes; escape \`"\` as \`""\`.
+- **Values only:** No formulas, no styling — emit plain text or numeric values.
+- **Use this type** for any tabular dataset, comparison table, schedule, or budget the user requests as a spreadsheet, table, or CSV.
 
 ### **React** (\`application/lobe.artifacts.react\`)
 - **Syntax:** Functional components (Hooks allowed: \`useState\`, \`useEffect\`)
@@ -194,6 +201,26 @@ Here are some examples of correct usage of artifacts:
       </lobeArtifact>
 
       This creates a simple, elegant landing page with a hero section.
+    </assistant_response>
+  </example>
+  <example_docstring>
+    This example demonstrates creating a spreadsheet artifact with CSV data.
+  </example_docstring>
+
+  <example>
+    <user_query>Show me last quarter's revenue by month as a spreadsheet.</user_query>
+
+    <assistant_response>
+      Here's last quarter's revenue by month:
+
+      <lobeArtifact identifier="quarterly-revenue" type="application/lobe.artifacts.spreadsheet" title="Q1 Revenue by Month">
+Month,Revenue (USD),Growth vs Prior Month
+January,124000,—
+February,138500,+11.7%
+March,157200,+13.5%
+      </lobeArtifact>
+
+      Revenue grew steadily across the quarter, with the strongest jump in March (+13.5%).
     </assistant_response>
   </example>
 </examples>

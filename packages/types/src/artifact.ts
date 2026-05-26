@@ -12,4 +12,5 @@ export enum ArtifactType {
   Default = 'html',
   Python = 'python',
   React = 'application/lobe.artifacts.react',
+  Spreadsheet = 'application/lobe.artifacts.spreadsheet',
 }

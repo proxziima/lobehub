@@ -64,6 +64,10 @@ const ArtifactsUI = memo(() => {
         return 'python';
       }
 
+      case ArtifactType.Spreadsheet: {
+        return 'csv';
+      }
+
       default: {
         return 'html';
       }
