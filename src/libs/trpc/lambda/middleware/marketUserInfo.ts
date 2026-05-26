@@ -28,14 +28,14 @@ export const marketUserInfo = trpc.middleware(async (opts) => {
   try {
     const user = await UserModel.findById(ctx.serverDB, ctx.userId);
 
-    if (!user || !user.email) {
+    if (!user) {
       return opts.next({
         ctx: { marketUserInfo: undefined },
       });
     }
 
     const marketUserInfo: TrustedClientUserInfo = {
-      email: user.email,
+      email: user.email || undefined,
       name: user.fullName || user.username || undefined,
       userId: ctx.userId,
     };

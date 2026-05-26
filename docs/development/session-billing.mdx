@@ -1,0 +1,229 @@
+# Session Billing — Anthropic-Style Rolling 5-Hour Window
+
+Implement a per-user token metering system modelled on Anthropic's Claude session limits:
+a **rolling 5-hour token budget** with **peak/off-peak weighting**, automatic pause when
+the budget is exhausted, and unblocking as old activity rolls out of the window.
+
+---
+
+## Why
+
+LobeHub already measures every token that flows through the agent runtime.
+The `ModelUsage` shape (input/output breakdowns, cache-hit/miss, cost) is
+persisted in `messages.metadata.usage` per assistant turn. What's missing
+is a metering layer that aggregates over time and gates new requests per user.
+
+---
+
+## Architecture
+
+```
+User request
+  │
+  ▼
+sessionLimitGuard middleware         ← assertBudget(userId) — blocks if over
+  │
+  ▼
+createRuntimeExecutors (call_llm)    ← existing server-side agent executor
+  │
+  ├─ AccumulateLLM (already exists)
+  │
+  └─ recordUsage(userId, messageId, modelUsage)   ← NEW: appends to usage_events
+```
+
+### Rolling window calculation
+
+```
+SELECT SUM(weighted_tokens)
+FROM usage_events
+WHERE user_id = ? AND occurred_at > now() - INTERVAL '5 hours'
+```
+
+No session row needed. The window is implicit and self-expiring.
+
+### Peak / off-peak weighting
+
+```
+weighted_tokens = raw_tokens * peakMultiplier(occurred_at)
+```
+
+Peak hours: **5:00–11:00 AM PT** and **1:00–7:00 PM GMT** (configurable).
+During peak, the multiplier is >1x so the budget depletes faster, exactly
+as Anthropic describes.
+
+### Context-window carryover
+
+Each conversation turn replays the full message history. LobeHub reports
+actual provider usage (`inputCacheMissTokens`, `inputTextTokens`), so
+long threads naturally consume more budget — no extra instrumentation needed.
+
+---
+
+## Implementation Steps
+
+### Step 1 — Database: `usage_events` table
+
+**File to create:** `packages/database/src/schemas/usageEvents.ts`
+
+```typescript
+export const usageEvents = pgTable(
+  'usage_events',
+  {
+    id:             text('id').$defaultFn(() => idGenerator('usage_events')).primaryKey(),
+    userId:         text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    occurredAt:     timestamp('occurred_at').defaultNow().notNull(),
+    messageId:      text('message_id').references(() => messages.id, { onDelete: 'set null' }),
+    model:          text('model'),
+    provider:       text('provider'),
+    weightedTokens: integer('weighted_tokens').notNull(),
+    rawInput:       integer('raw_input'),
+    rawOutput:      integer('raw_output'),
+    rawCached:      integer('raw_cached'),
+    costCents:      integer('cost_cents'),
+  },
+  (t) => [
+    index('usage_events_user_time_idx').on(t.userId, t.occurredAt),
+  ],
+);
+```
+
+Then generate the migration: `bunx drizzle-kit generate`.
+
+**Model class:** `packages/database/src/models/usageEvent.ts`
+Mirror the `MessageModel` style — user-scoped constructor, `insert`, `sumWindow` methods.
+
+---
+
+### Step 2 — Billing service
+
+**File to create:** `src/server/services/sessionBilling/index.ts`
+
+Export three functions:
+
+```typescript
+recordUsage(params: {
+  userId: string;
+  messageId: string;
+  model: string;
+  provider: string;
+  modelUsage: ModelUsage;
+}): Promise<void>
+
+getRemainingBudget(userId: string): Promise<{
+  used: number;
+  limit: number;
+  resetsAt: Date;
+  isPeak: boolean;
+}>
+
+assertBudget(userId: string): Promise<void>  // throws SessionLimitExceededError
+```
+
+`peakMultiplier(date: Date): number` — returns a configurable multiplier based
+on whether `date` falls in peak hours (Pacific time). Gate the entire module
+behind `process.env.SESSION_BILLING_ENABLED`.
+
+Default limit: `process.env.SESSION_LIMIT_TOKENS` (e.g. `200000`).
+Per-plan overrides live in the user's subscription record once that layer exists.
+
+---
+
+### Step 3 — Hook into RuntimeExecutors
+
+**File to modify:** `src/server/modules/AgentRuntime/RuntimeExecutors.ts:311`
+
+After the `UsageCounter.accumulateLLM(...)` call in `call_llm`, add:
+
+```typescript
+if (process.env.SESSION_BILLING_ENABLED) {
+  await recordUsage({
+    userId: ctx.userId,
+    messageId: assistantMessageItem.id,
+    model,
+    provider,
+    modelUsage: stepModelUsage,   // the delta from this LLM hop
+  });
+}
+```
+
+---
+
+### Step 4 — tRPC middleware guard
+
+**File to create:** `src/libs/trpc/lambda/middleware/sessionLimitGuard.ts`
+
+Pattern mirrors `marketUserInfo.ts`. Applied to chat-mutation procedures
+**before** the executor runs. Calls `assertBudget(ctx.userId)`.
+
+Wire it into the relevant procedures in
+`src/business/server/lambda-routers/subscription.ts` (currently an empty stub).
+
+---
+
+### Step 5 — `getRemainingBudget` tRPC query
+
+**File to modify:** `src/business/server/lambda-routers/subscription.ts`
+
+Add a `getBudget` query that calls `getRemainingBudget(userId)` and returns
+`{ used, limit, resetsAt, isPeak }`. Used by the SPA banner.
+
+---
+
+### Step 6 — UI meter
+
+**File to create:** `src/features/SessionUsage/UsageMeter.tsx`
+
+A small status-bar widget (SWR-polled, \~30 s interval) showing:
+
+- Progress bar: X% of budget used
+- Peak/off-peak indicator
+- "Resets in 2 h 13 m" countdown
+
+Plug into the main layout sidebar footer or conversation header.
+
+i18n keys → `src/locales/default/subscription.ts`.
+
+---
+
+## Key risks
+
+| Risk                                                                                         | Mitigation                                                              |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Can only block *after* the turn that breaches the limit (true token count known post-stream) | Acceptable for v1; add pre-flight estimation later                      |
+| DST boundary in peak-hour logic                                                              | Unit-test `peakMultiplier` at PT transitions explicitly                 |
+| Sub-agents / group orchestration consume budget under invoking user                          | `accumulateLLM` already fires per hop → `recordUsage` captures all hops |
+| Self-hosted operators don't want billing                                                     | Gate on `SESSION_BILLING_ENABLED=true` (off by default)                 |
+
+---
+
+## Verification
+
+```bash
+# Unit tests (billing service + peak multiplier)
+bunx vitest run --silent='passed-only' src/server/services/sessionBilling/
+
+# DB model tests
+cd packages/database && bunx vitest run --silent='passed-only' src/models/usageEvent.test.ts
+
+# Type check
+bun run type-check
+```
+
+E2E: `bun run dev:spa`, send turns until limit exceeded, verify
+`SESSION_LIMIT_EXCEEDED` error surfaces with reset time, then rolls over.
+
+---
+
+## Files at a glance
+
+| Action | Path                                                     |
+| ------ | -------------------------------------------------------- |
+| CREATE | `packages/database/src/schemas/usageEvents.ts`           |
+| CREATE | `packages/database/migrations/<ts>_add_usage_events.sql` |
+| CREATE | `packages/database/src/models/usageEvent.ts`             |
+| CREATE | `src/server/services/sessionBilling/index.ts`            |
+| CREATE | `src/libs/trpc/lambda/middleware/sessionLimitGuard.ts`   |
+| CREATE | `src/features/SessionUsage/UsageMeter.tsx`               |
+| MODIFY | `src/server/modules/AgentRuntime/RuntimeExecutors.ts`    |
+| MODIFY | `src/business/server/lambda-routers/subscription.ts`     |
+| MODIFY | `src/locales/default/subscription.ts`                    |

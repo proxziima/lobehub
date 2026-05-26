@@ -123,11 +123,12 @@ export default defineConfig({
   plugins: [
     vercelSkewProtection(),
     viteEnvRestartKeys(['APP_URL']),
-    enableViteDevTools && DevTools({
-      build: {
-        withApp: true,
-      },
-    }),
+    enableViteDevTools &&
+      DevTools({
+        build: {
+          withApp: true,
+        },
+      }),
     ...sharedRendererPlugins({ platform }),
 
     isDev && {
@@ -295,6 +296,9 @@ export default defineConfig({
     cors: true,
     host: true,
     port: 9876,
+    watch: {
+      ignored: ['**/.codegraph/**'],
+    },
     proxy: {
       '/api': `http://localhost:${process.env.PORT || 3010}`,
       '/oidc': `http://localhost:${process.env.PORT || 3010}`,

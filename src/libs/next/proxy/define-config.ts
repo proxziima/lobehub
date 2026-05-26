@@ -191,6 +191,10 @@ export function defineConfig() {
     '/oidc/handoff',
     '/oidc/device/auth',
     '/oidc/token',
+    // market stub — trust-token protected; no BetterAuth session needed
+    '/api/connect(.*)',
+    '/api/market-stub-callback(.*)',
+    '/lobehub-oidc(.*)',
     // market
     '/market-auth-callback',
     // public share pages
