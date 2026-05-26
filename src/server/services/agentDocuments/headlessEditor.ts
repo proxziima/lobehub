@@ -126,13 +126,17 @@ const loadEditorState = (
   { editorData, fallbackContent = '' }: LoadEditorStateParams,
 ) => {
   if (isValidEditorData(editorData)) {
-    editor.hydrateEditorData(
-      editorData as unknown as SerializedEditorState<SerializedLexicalNode>,
-      {
-        keepId: true,
-      },
-    );
-    return;
+    try {
+      editor.hydrateEditorData(
+        editorData as unknown as SerializedEditorState<SerializedLexicalNode>,
+        {
+          keepId: true,
+        },
+      );
+      return;
+    } catch {
+      // stale editorData schema — fall through to markdown fallback
+    }
   }
 
   hydrateMarkdownOrEmptyState(editor, fallbackContent, { keepId: true });

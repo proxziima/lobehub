@@ -125,7 +125,12 @@ export class AgentDocumentsService {
 
       return { ...doc, content };
     } catch (error) {
-      console.error('[AgentDocumentsService] Failed to project editorData to Markdown:', error);
+      console.error(
+        '[AgentDocumentsService] Failed to project editorData to Markdown for doc',
+        doc.id,
+        ':',
+        error,
+      );
       return doc;
     }
   }
