@@ -1002,6 +1002,52 @@ describe('ConversationLifecycle actions', () => {
       });
     });
 
+    describe('heterogeneous agent SESSION_LIMIT_EXCEEDED handling', () => {
+      it('should store sessionLimitError in operation metadata when hetero send is blocked by session limit', async () => {
+        mockConstEnv.isDesktop = true;
+        setupMockSelectors({
+          agentConfig: {
+            agencyConfig: {
+              heterogeneousProvider: { command: 'codex', type: 'codex' },
+            },
+          },
+        });
+
+        const sessionLimitTrpcError = Object.assign(
+          new TRPCClientError('Session token limit exceeded'),
+          {
+            data: {
+              errorData: {
+                code: 'SESSION_LIMIT_EXCEEDED',
+                limit: 1000,
+                limitType: 'session',
+                resetsAt: null,
+                used: 1000,
+              },
+            },
+          },
+        );
+
+        vi.spyOn(aiChatService, 'sendMessageInServer').mockRejectedValue(sessionLimitTrpcError);
+
+        const { result } = renderHook(() => useChatStore());
+
+        await act(async () => {
+          await result.current.sendMessage({
+            message: 'hello',
+            context: createTestContext(),
+          });
+        });
+
+        const ops = Object.values(result.current.operations);
+        const sendOp = ops.find((op) => op.type === 'sendMessage');
+        expect(sendOp?.metadata.sessionLimitError).toMatchObject({
+          code: 'SESSION_LIMIT_EXCEEDED',
+          limit: 1000,
+        });
+      });
+    });
+
     describe('optimistic topic updatedAt', () => {
       it('should optimistically update topic updatedAt when sending message to existing topic', async () => {
         const { result } = renderHook(() => useChatStore());

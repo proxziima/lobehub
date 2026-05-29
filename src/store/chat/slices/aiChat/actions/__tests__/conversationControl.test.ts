@@ -291,6 +291,46 @@ describe('ConversationControl actions', () => {
       expect(result.current.operations[operationId!].metadata.inputSendErrorMsg).toBeUndefined();
     });
 
+    it('should also clear sessionLimitError for current topic', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        useChatStore.setState({
+          activeAgentId: TEST_IDS.SESSION_ID,
+          activeTopicId: TEST_IDS.TOPIC_ID,
+        });
+      });
+
+      let operationId: string;
+      act(() => {
+        const res = result.current.startOperation({
+          type: 'sendMessage',
+          context: {
+            agentId: TEST_IDS.SESSION_ID,
+            topicId: TEST_IDS.TOPIC_ID,
+          },
+        });
+        operationId = res.operationId;
+
+        result.current.updateOperationMetadata(res.operationId, {
+          sessionLimitError: {
+            code: 'SESSION_LIMIT_EXCEEDED',
+            limit: 1000,
+            resetsAt: null,
+            used: 1000,
+          },
+        });
+      });
+
+      expect(result.current.operations[operationId!].metadata.sessionLimitError).toBeDefined();
+
+      act(() => {
+        result.current.clearSendMessageError();
+      });
+
+      expect(result.current.operations[operationId!].metadata.sessionLimitError).toBeUndefined();
+    });
+
     it('should handle gracefully when no error operation exists', () => {
       const { result } = renderHook(() => useChatStore());
 

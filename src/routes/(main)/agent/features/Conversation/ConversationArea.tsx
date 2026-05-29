@@ -11,7 +11,8 @@ import ChatMiniMap from '@/features/ChatMiniMap';
 import { ChatList, ConversationProvider } from '@/features/Conversation';
 import { useChatFollowUp } from '@/features/Conversation/hooks/useChatFollowUp';
 import { mergeConversationHooks } from '@/features/Conversation/utils/mergeConversationHooks';
-import { ChatUsageBanner } from '@/features/SessionUsage';
+import { ChatUsageBanner, useBudget } from '@/features/SessionUsage';
+import WideScreenContainer from '@/features/WideScreenContainer';
 import ZenModeToast from '@/features/ZenModeToast';
 import { useGatewayReconnect } from '@/hooks/useGatewayReconnect';
 import { useOperationState } from '@/hooks/useOperationState';
@@ -68,6 +69,11 @@ const Conversation = memo(() => {
   const isSubagentThread = useChatStore(threadSelectors.isActiveThreadSubagent);
 
   const sessionLimitError = useChatStore(aiChatSelectors.isCurrentSessionLimitError);
+  const { data: budget } = useBudget();
+  // sendDisabled: live budget is the source of truth; fall back to op error while SWR loads.
+  const sendDisabled = budget
+    ? budget.session.used >= budget.session.limit || budget.weekly.used >= budget.weekly.limit
+    : !!sessionLimitError;
 
   // Auto-reconnect to running Gateway operation on topic load
   const runningOperation = useChatStore((s) =>
@@ -135,18 +141,18 @@ const Conversation = memo(() => {
           }
         />
       </Flexbox>
-      {!isSubagentThread && sessionLimitError && (
-        <ChatUsageBanner
-          limit={sessionLimitError.limit}
-          resetsAt={sessionLimitError.resetsAt ? new Date(sessionLimitError.resetsAt) : null}
-          used={sessionLimitError.used}
-        />
+      {!isSubagentThread && (
+        <WideScreenContainer>
+          <div style={{ marginInlineStart: 0 }}>
+            <ChatUsageBanner />
+          </div>
+        </WideScreenContainer>
       )}
       {!isSubagentThread &&
         (isHeterogeneousAgent ? (
           <HeterogeneousChatInput />
         ) : (
-          <MainChatInput sendDisabled={!!sessionLimitError} />
+          <MainChatInput sendDisabled={sendDisabled} />
         ))}
       <ThreadHydration />
       <ChatMiniMap />

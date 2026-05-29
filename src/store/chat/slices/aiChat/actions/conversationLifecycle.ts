@@ -406,6 +406,9 @@ export class ConversationLifecycleActionImpl {
       parentId = displayMessageSelectors.findLastMessageId(lastMessage.id)(this.#get());
     }
 
+    // Clear any stale send errors (including sessionLimitError) before starting a fresh attempt
+    this.#get().clearSendMessageError();
+
     // Create operation for send message first, so we can use operationId for optimistic updates
     const tempId = 'tmp_' + nanoid();
     const tempAssistantId = 'tmp_' + nanoid();
@@ -539,6 +542,26 @@ export class ConversationLifecycleActionImpl {
           abortController,
         );
       } catch (e) {
+        if (e instanceof TRPCClientError) {
+          const errorData = e.data?.errorData as
+            | {
+                code: string;
+                limit: number;
+                limitType: 'session' | 'weekly';
+                resetsAt: string | null;
+                used: number;
+              }
+            | undefined;
+          if (errorData?.code === 'SESSION_LIMIT_EXCEEDED') {
+            this.#get().updateOperationMetadata(operationId, { sessionLimitError: errorData });
+            swrMutate(BUDGET_SWR_KEY).catch(() => {});
+            this.#get().failOperation(operationId, {
+              message: 'SESSION_LIMIT_EXCEEDED',
+              type: 'HeterogeneousAgentError',
+            });
+            return;
+          }
+        }
         console.error('[HeterogeneousAgent] Failed to persist messages:', e);
         this.#get().failOperation(operationId, {
           message: e instanceof Error ? e.message : 'Unknown error',
@@ -870,7 +893,13 @@ export class ConversationLifecycleActionImpl {
         // Check if error is due to cancellation
         if (!isAbort) {
           const errorData = e.data?.errorData as
-            | { code: string; limit: number; resetsAt: string | null; used: number }
+            | {
+                code: string;
+                limit: number;
+                limitType: 'session' | 'weekly';
+                resetsAt: string | null;
+                used: number;
+              }
             | undefined;
 
           if (errorData?.code === 'SESSION_LIMIT_EXCEEDED') {

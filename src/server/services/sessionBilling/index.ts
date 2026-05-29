@@ -19,17 +19,39 @@ const envInt = (key: string, def: number) => {
   return v ? Number.parseInt(v, 10) : def;
 };
 
+const envFloat = (key: string, def: number) => {
+  const v = process.env[key];
+  return v ? Number.parseFloat(v) : def;
+};
+
 export const SESSION_BILLING_ENABLED = () => process.env.SESSION_BILLING_ENABLED === 'true';
 
-export const PEAK_MULTIPLIER = () => envInt('SESSION_BILLING_PEAK_MULTIPLIER', 2);
+const PLAN_PRESETS = {
+  max20: { peakMultiplier: 1.5, session: 220_000, weekly: 2_000_000, windowHours: 5 },
+  max5: { peakMultiplier: 1.5, session: 88_000, weekly: 700_000, windowHours: 5 },
+  pro: { peakMultiplier: 1.5, session: 44_000, weekly: 350_000, windowHours: 5 },
+} as const;
 
-export const SESSION_LIMIT = () => envInt('SESSION_LIMIT_TOKENS', 200_000);
+const planDefaults = () =>
+  PLAN_PRESETS[process.env.SESSION_PLAN as keyof typeof PLAN_PRESETS] ?? null;
 
-export const WEEKLY_LIMIT = () => envInt('SESSION_LIMIT_TOKENS_WEEKLY', 1_000_000);
+export const PEAK_MULTIPLIER = () =>
+  envFloat('SESSION_BILLING_PEAK_MULTIPLIER', planDefaults()?.peakMultiplier ?? 1.5);
+export const SESSION_LIMIT = () =>
+  envInt('SESSION_LIMIT_TOKENS', planDefaults()?.session ?? 200_000);
+export const SESSION_WINDOW_HOURS = () =>
+  envInt('SESSION_WINDOW_HOURS', planDefaults()?.windowHours ?? 5);
+export const WEEKLY_LIMIT = () =>
+  envInt('SESSION_LIMIT_TOKENS_WEEKLY', planDefaults()?.weekly ?? 1_000_000);
+export const COST_MARKUP = () => envFloat('SESSION_BILLING_COST_MARKUP', 1);
 
-export const COST_MARKUP = () => {
-  const v = process.env.SESSION_BILLING_COST_MARKUP;
-  return v ? Number.parseFloat(v) : 1;
+export const computeWeekBoundaries = (timezone = 'UTC'): { resetsAt: Date; windowStart: Date } => {
+  const now = dayjs().tz(timezone);
+  const lastSunday = now.subtract(now.day(), 'day').startOf('day');
+  return {
+    resetsAt: lastSunday.add(7, 'day').toDate(),
+    windowStart: lastSunday.toDate(),
+  };
 };
 
 /**
@@ -42,14 +64,13 @@ export const peakMultiplier = (date: Date): number => {
 
 export type DailyBreakdownItem = { date: string; weekday: string; tokens: number };
 
-export type BudgetSnapshot = {
+export type BudgetCheck = {
   session: { used: number; limit: number; resetsAt: Date | null; isPeak: boolean };
-  weekly: {
-    used: number;
-    limit: number;
-    resetsAt: Date;
-    dailyBreakdown: DailyBreakdownItem[];
-  };
+  weekly: { used: number; limit: number; resetsAt: Date };
+};
+
+export type BudgetSnapshot = BudgetCheck & {
+  weekly: BudgetCheck['weekly'] & { dailyBreakdown: DailyBreakdownItem[] };
 };
 
 export const recordUsage = async (params: {
@@ -85,12 +106,16 @@ export const recordUsage = async (params: {
   });
 };
 
-export const getBudget = async (userId: string, db: LobeChatDatabase): Promise<BudgetSnapshot> => {
+export const checkBudget = async (
+  userId: string,
+  db: LobeChatDatabase,
+  timezone?: string,
+): Promise<BudgetCheck> => {
   const eventModel = new UsageEventModel(db, userId);
-  const [sessionWindow, weeklyWindow, dailyBreakdown] = await Promise.all([
-    eventModel.getSessionWindow(),
-    eventModel.getWeeklyWindow(),
-    eventModel.getDailyBreakdown(),
+  const { windowStart, resetsAt } = computeWeekBoundaries(timezone);
+  const [sessionWindow, weeklyWindow] = await Promise.all([
+    eventModel.getSessionWindow(SESSION_WINDOW_HOURS()),
+    eventModel.getWeeklyWindow(windowStart, resetsAt),
   ]);
 
   return {
@@ -101,7 +126,6 @@ export const getBudget = async (userId: string, db: LobeChatDatabase): Promise<B
       used: sessionWindow.used,
     },
     weekly: {
-      dailyBreakdown,
       limit: WEEKLY_LIMIT(),
       resetsAt: weeklyWindow.resetsAt,
       used: weeklyWindow.used,
@@ -109,8 +133,31 @@ export const getBudget = async (userId: string, db: LobeChatDatabase): Promise<B
   };
 };
 
+export const getBudget = async (
+  userId: string,
+  db: LobeChatDatabase,
+  timezone?: string,
+): Promise<BudgetSnapshot> => {
+  const eventModel = new UsageEventModel(db, userId);
+  const { windowStart, resetsAt } = computeWeekBoundaries(timezone);
+  const [check, dailyBreakdown] = await Promise.all([
+    checkBudget(userId, db, timezone),
+    eventModel.getDailyBreakdown(windowStart, timezone),
+  ]);
+
+  return {
+    ...check,
+    weekly: { ...check.weekly, dailyBreakdown },
+  };
+};
+
 export class SessionLimitExceededError extends TRPCError {
-  constructor(params: { resetsAt: Date | null; used: number; limit: number }) {
+  constructor(params: {
+    resetsAt: Date | null;
+    used: number;
+    limit: number;
+    limitType: 'session' | 'weekly';
+  }) {
     super({
       code: 'FORBIDDEN',
       message: 'Session token limit exceeded',
@@ -118,6 +165,7 @@ export class SessionLimitExceededError extends TRPCError {
         data: {
           code: 'SESSION_LIMIT_EXCEEDED',
           limit: params.limit,
+          limitType: params.limitType,
           resetsAt: params.resetsAt?.toISOString() ?? null,
           used: params.used,
         },
@@ -128,25 +176,27 @@ export class SessionLimitExceededError extends TRPCError {
 
 /**
  * Throws SessionLimitExceededError when used > limit (strict greater-than).
- * Pass a pre-fetched budget snapshot to avoid an extra DB round-trip.
+ * Pass a pre-fetched BudgetCheck to avoid an extra DB round-trip.
  */
-export const assertBudget = async (userId: string, budget: BudgetSnapshot): Promise<void> => {
+export const assertBudget = async (userId: string, budget: BudgetCheck): Promise<void> => {
   if (!SESSION_BILLING_ENABLED()) return;
   if (!userId) return;
 
   const { session, weekly } = budget;
 
-  if (session.used > session.limit) {
+  if (session.used >= session.limit) {
     throw new SessionLimitExceededError({
       limit: session.limit,
+      limitType: 'session',
       resetsAt: session.resetsAt,
       used: session.used,
     });
   }
 
-  if (weekly.used > weekly.limit) {
+  if (weekly.used >= weekly.limit) {
     throw new SessionLimitExceededError({
       limit: weekly.limit,
+      limitType: 'weekly',
       resetsAt: weekly.resetsAt,
       used: weekly.used,
     });

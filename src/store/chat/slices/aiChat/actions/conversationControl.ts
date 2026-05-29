@@ -198,11 +198,16 @@ export class ConversationControlActionImpl {
     const contextKey = messageMapKey({ agentId: activeAgentId, topicId: activeTopicId });
     const operationIds = this.#get().operationsByContext[contextKey] || [];
 
-    // Clear error message from all sendMessage operations in current context
+    // Clear error state from all sendMessage operations in current context
     operationIds.forEach((opId) => {
       const op = this.#get().operations[opId];
-      if (op && op.type === 'sendMessage' && op.metadata.inputSendErrorMsg) {
-        this.#get().updateOperationMetadata(opId, { inputSendErrorMsg: undefined });
+      if (op && op.type === 'sendMessage') {
+        const updates: Record<string, undefined> = {};
+        if (op.metadata.inputSendErrorMsg !== undefined) updates.inputSendErrorMsg = undefined;
+        if (op.metadata.sessionLimitError !== undefined) updates.sessionLimitError = undefined;
+        if (Object.keys(updates).length > 0) {
+          this.#get().updateOperationMetadata(opId, updates);
+        }
       }
     });
   };

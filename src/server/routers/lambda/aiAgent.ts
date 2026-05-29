@@ -18,7 +18,7 @@ import { TaskTopicModel } from '@/database/models/taskTopic';
 import { ThreadModel } from '@/database/models/thread';
 import { TopicModel } from '@/database/models/topic';
 import { authedProcedure, heteroAuthedProcedure, router } from '@/libs/trpc/lambda';
-import { serverDatabase } from '@/libs/trpc/lambda/middleware';
+import { serverDatabase, sessionLimitGuard } from '@/libs/trpc/lambda/middleware';
 import { AgentRuntimeService } from '@/server/services/agentRuntime';
 import { AiAgentService } from '@/server/services/aiAgent';
 import { AiChatService } from '@/server/services/aiChat';
@@ -431,15 +431,18 @@ const aiAgentProcedure = authedProcedure.use(serverDatabase).use(async (opts) =>
 // Dedicated procedure for hetero-agent ingest/finish endpoints.
 // Requires a `hetero-operation` JWT (4h expiry) — normal user tokens are rejected,
 // so only the sandbox/device that received the JWT from execAgent can call these.
-const heteroAgentProcedure = heteroAuthedProcedure.use(serverDatabase).use(async (opts) => {
-  const { ctx } = opts;
+const heteroAgentProcedure = heteroAuthedProcedure
+  .use(serverDatabase)
+  .use(sessionLimitGuard)
+  .use(async (opts) => {
+    const { ctx } = opts;
 
-  return opts.next({
-    ctx: {
-      heterogeneousAgentService: new HeterogeneousAgentService(ctx.serverDB, ctx.userId),
-    },
+    return opts.next({
+      ctx: {
+        heterogeneousAgentService: new HeterogeneousAgentService(ctx.serverDB, ctx.userId),
+      },
+    });
   });
-});
 
 export const aiAgentRouter = router({
   /**
