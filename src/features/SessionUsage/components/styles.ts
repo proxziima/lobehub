@@ -51,8 +51,8 @@ export const styles = createStaticStyles(({ css, cssVar }) => ({
   `,
 
   percentText: css`
-    font-size: 22px;
-    font-weight: 700;
+    font-size: 18px;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     line-height: 1;
   `,

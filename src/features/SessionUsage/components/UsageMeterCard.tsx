@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { BudgetSnapshot } from '@/server/services/sessionBilling';
 
-import { formatTimeLeft, getThreshold } from '../utils';
+import { formatTimeLeft } from '../utils';
 import { styles } from './styles';
 import WeeklyBarChart from './WeeklyBarChart';
 
@@ -26,15 +26,7 @@ const UsageMeterCard = memo<UsageMeterCardProps>(({ data }) => {
   const sessionPct = Math.min(100, Math.round((session.used / session.limit) * 100));
   const weeklyPct = Math.min(100, Math.round((weekly.used / weekly.limit) * 100));
 
-  const resolveColor = (pct: number) => {
-    const t = getThreshold(pct);
-    if (t === 'danger') return token.colorError;
-    if (t === 'warn') return token.colorWarning;
-    return token.colorSuccess;
-  };
-
-  const sessionColor = resolveColor(sessionPct);
-  const weeklyColor = resolveColor(weeklyPct);
+  const barColor = session.isPeak ? token.colorWarning : token.colorInfo;
   const sessionTimeLeft = formatTimeLeft(session.resetsAt);
 
   return (
@@ -51,7 +43,7 @@ const UsageMeterCard = memo<UsageMeterCardProps>(({ data }) => {
             </span>
             {t('sessionBilling.currentSession')}
           </div>
-          <span className={styles.percentText} style={{ color: sessionColor }}>
+          <span className={styles.percentText} style={{ color: barColor }}>
             {sessionPct}%
           </span>
         </div>
@@ -59,8 +51,8 @@ const UsageMeterCard = memo<UsageMeterCardProps>(({ data }) => {
           <Progress
             percent={sessionPct}
             showInfo={false}
-            strokeColor={sessionColor}
-            strokeWidth={10}
+            strokeColor={barColor}
+            strokeWidth={6}
             style={{ margin: 0 }}
             trailColor={token.colorFillSecondary}
           />
@@ -91,7 +83,7 @@ const UsageMeterCard = memo<UsageMeterCardProps>(({ data }) => {
               />
             </button>
           </div>
-          <span className={styles.percentText} style={{ color: weeklyColor }}>
+          <span className={styles.percentText} style={{ color: barColor }}>
             {weeklyPct}%
           </span>
         </div>
@@ -103,8 +95,8 @@ const UsageMeterCard = memo<UsageMeterCardProps>(({ data }) => {
             <Progress
               percent={weeklyPct}
               showInfo={false}
-              strokeColor={weeklyColor}
-              strokeWidth={10}
+              strokeColor={barColor}
+              strokeWidth={6}
               style={{ margin: 0 }}
               trailColor={token.colorFillSecondary}
             />

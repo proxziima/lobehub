@@ -1857,6 +1857,23 @@ table topics {
   }
 }
 
+table usage_events {
+  id text [pk, not null]
+  user_id text [not null]
+  occurred_at "timestamp with time zone" [not null, default: `now()`]
+  message_id text
+  model text
+  provider text
+  weighted_tokens integer [not null]
+  raw_input integer
+  raw_output integer
+  cost_cents "double precision"
+
+  indexes {
+    (user_id, occurred_at) [name: 'usage_events_user_time_idx']
+  }
+}
+
 table user_installed_plugins {
   user_id text [not null]
   identifier text [not null]

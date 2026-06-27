@@ -1,0 +1,1 @@
+ALTER TABLE "usage_events" ALTER COLUMN "cost_cents" SET DATA TYPE double precision;

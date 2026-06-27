@@ -1,6 +1,11 @@
 import type { LobeChatDatabase } from '@lobechat/database';
 
-import { assertBudget, getBudget, SESSION_BILLING_ENABLED } from '@/server/services/sessionBilling';
+import { UserModel } from '@/database/models/user';
+import {
+  assertBudget,
+  checkBudget,
+  SESSION_BILLING_ENABLED,
+} from '@/server/services/sessionBilling';
 
 import { trpc } from '../init';
 
@@ -22,7 +27,11 @@ export const sessionLimitGuard = trpc.middleware(async (opts) => {
     return opts.next();
   }
 
-  const budget = await getBudget(ctx.userId, ctx.serverDB);
+  const userModel = new UserModel(ctx.serverDB, ctx.userId);
+  const settings = await userModel.getUserSettings();
+  const timezone = (settings?.general as Record<string, unknown>)?.timezone as string | undefined;
+
+  const budget = await checkBudget(ctx.userId, ctx.serverDB, timezone);
   await assertBudget(ctx.userId, budget);
 
   return opts.next();

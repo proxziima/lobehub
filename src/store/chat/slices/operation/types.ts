@@ -154,6 +154,7 @@ export interface OperationMetadata {
   sessionLimitError?: {
     code: string;
     limit: number;
+    limitType: 'session' | 'weekly';
     resetsAt: string | null;
     used: number;
   };

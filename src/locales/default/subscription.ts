@@ -529,13 +529,22 @@ export default {
   'sessionBilling.weeklyOverview': 'Weekly Overview',
   'sessionBilling.weeklyTotal': 'Weekly Total',
   'sessionBilling.dailyAverage': 'Daily Average',
-  'sessionBilling.sessionWindow': 'Current session (5-hour window)',
+  'sessionBilling.sessionWindow': 'Current session (rolling window)',
   'sessionBilling.weeklyWindow': 'Weekly usage',
   'sessionBilling.weeklyResets': 'Resets {{time}}',
   'sessionBilling.resetsIn': 'Resets in {{time}}',
   'sessionBilling.used': 'used',
   'sessionBilling.peak': 'Peak hours',
-  'sessionBilling.limitReached': 'Usage limit reached',
+  'sessionBilling.limitReached': 'Session limit reached',
   'sessionBilling.limitReachedDesc':
-    'Your token budget has been exhausted. Please wait for the window to reset.',
+    'Your 5-hour session token budget has been exhausted. Please wait for the window to reset.',
+  'sessionBilling.weeklyLimitReached': 'Weekly limit reached',
+  'sessionBilling.weeklyLimitReachedDesc':
+    'Your weekly token budget is exhausted. It resets at the start of next Sunday (UTC).',
+  'sessionBilling.approachingLimit': 'Approaching session limit ({{pct}}% used)',
+  'sessionBilling.approachingLimitDesc':
+    'You are nearing your session token limit. Resets in {{time}}.',
+  'sessionBilling.approachingWeeklyLimit': 'Approaching weekly limit ({{pct}}% used)',
+  'sessionBilling.approachingWeeklyLimitDesc':
+    'You are nearing your weekly token budget. It resets at the start of next Sunday (UTC).',
 };

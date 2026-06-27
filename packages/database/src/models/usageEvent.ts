@@ -29,8 +29,9 @@ export class UsageEventModel {
     });
   };
 
-  getSessionWindow = async (): Promise<{ used: number; resetsAt: Date | null }> => {
-    const windowStart = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  getSessionWindow = async (windowHours = 5): Promise<{ used: number; resetsAt: Date | null }> => {
+    const windowMs = windowHours * 3_600_000;
+    const windowStart = new Date(Date.now() - windowMs);
 
     const [row] = await this.db
       .select({
@@ -42,61 +43,49 @@ export class UsageEventModel {
 
     if (!row?.total) return { resetsAt: null, used: 0 };
 
-    const resetsAt = row.oldestAt
-      ? new Date(new Date(row.oldestAt).getTime() + 5 * 60 * 60 * 1000)
-      : null;
+    const resetsAt = row.oldestAt ? new Date(new Date(row.oldestAt).getTime() + windowMs) : null;
 
     return { resetsAt, used: Number(row.total) };
   };
 
-  getDailyBreakdown = async (): Promise<
-    Array<{ date: string; weekday: string; tokens: number }>
-  > => {
-    const now = new Date();
-    const dayOfWeek = now.getUTCDay();
-    const lastSunday = new Date(now);
-    lastSunday.setUTCDate(now.getUTCDate() - dayOfWeek);
-    lastSunday.setUTCHours(0, 0, 0, 0);
-
+  getDailyBreakdown = async (
+    windowStart: Date,
+    timezone = 'UTC',
+  ): Promise<Array<{ date: string; weekday: string; tokens: number }>> => {
+    // Embed timezone as a literal so SELECT/GROUP BY/ORDER BY share the same expression text.
+    // PostgreSQL error 42803 occurs when the same column appears with different bind parameters
+    // ($1 vs $4) across SELECT and GROUP BY — the planner can't prove $1 === $4 at parse time.
+    const safeTz = timezone.replaceAll(/[^\w/+-]/g, '');
+    const dayExpr = sql<string>`(${usageEvents.occurredAt} AT TIME ZONE '${sql.raw(safeTz)}')::date`;
     const rows = await this.db
       .select({
-        day: sql<string>`(${usageEvents.occurredAt} AT TIME ZONE 'UTC')::date::text`,
+        day: sql<string>`${dayExpr}::text`,
         total: sum(usageEvents.weightedTokens),
       })
       .from(usageEvents)
-      .where(and(eq(usageEvents.userId, this.userId), gte(usageEvents.occurredAt, lastSunday)))
-      .groupBy(sql`(${usageEvents.occurredAt} AT TIME ZONE 'UTC')::date`)
-      .orderBy(sql`(${usageEvents.occurredAt} AT TIME ZONE 'UTC')::date`);
+      .where(and(eq(usageEvents.userId, this.userId), gte(usageEvents.occurredAt, windowStart)))
+      .groupBy(dayExpr)
+      .orderBy(dayExpr);
 
     const map = new Map(rows.map((r) => [r.day, Number(r.total ?? 0)]));
 
     const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(lastSunday);
-      d.setUTCDate(lastSunday.getUTCDate() + i);
+      const d = new Date(windowStart.getTime() + i * 86_400_000);
       const date = d.toISOString().slice(0, 10);
       return { date, tokens: map.get(date) ?? 0, weekday: weekdays[i] };
     });
   };
 
-  getWeeklyWindow = async (): Promise<{ used: number; resetsAt: Date }> => {
-    const now = new Date();
-
-    // Last Sunday 00:00 UTC
-    const dayOfWeek = now.getUTCDay(); // 0 = Sunday
-    const lastSunday = new Date(now);
-    lastSunday.setUTCDate(now.getUTCDate() - dayOfWeek);
-    lastSunday.setUTCHours(0, 0, 0, 0);
-
-    // Next Sunday 00:00 UTC
-    const nextSunday = new Date(lastSunday);
-    nextSunday.setUTCDate(lastSunday.getUTCDate() + 7);
-
+  getWeeklyWindow = async (
+    windowStart: Date,
+    resetsAt: Date,
+  ): Promise<{ used: number; resetsAt: Date }> => {
     const [row] = await this.db
       .select({ total: sum(usageEvents.weightedTokens) })
       .from(usageEvents)
-      .where(and(eq(usageEvents.userId, this.userId), gte(usageEvents.occurredAt, lastSunday)));
+      .where(and(eq(usageEvents.userId, this.userId), gte(usageEvents.occurredAt, windowStart)));
 
-    return { resetsAt: nextSunday, used: Number(row?.total ?? 0) };
+    return { resetsAt, used: Number(row?.total ?? 0) };
   };
 }

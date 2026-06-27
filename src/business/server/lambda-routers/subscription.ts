@@ -1,13 +1,17 @@
 import { ModelUsageSchema } from '@lobechat/types';
 import { z } from 'zod';
 
+import { UserModel } from '@/database/models/user';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { getBudget, recordUsage, SESSION_BILLING_ENABLED } from '@/server/services/sessionBilling';
 
 export const subscriptionRouter = router({
   getBudget: authedProcedure.use(serverDatabase).query(async ({ ctx }) => {
-    return getBudget(ctx.userId, ctx.serverDB);
+    const userModel = new UserModel(ctx.serverDB, ctx.userId);
+    const settings = await userModel.getUserSettings();
+    const timezone = (settings?.general as Record<string, unknown>)?.timezone as string | undefined;
+    return getBudget(ctx.userId, ctx.serverDB, timezone);
   }),
 
   recordUsage: authedProcedure

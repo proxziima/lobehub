@@ -27,9 +27,9 @@ const envFloat = (key: string, def: number) => {
 export const SESSION_BILLING_ENABLED = () => process.env.SESSION_BILLING_ENABLED === 'true';
 
 const PLAN_PRESETS = {
-  max20: { peakMultiplier: 1.5, session: 220_000, weekly: 2_000_000, windowHours: 5 },
-  max5: { peakMultiplier: 1.5, session: 88_000, weekly: 700_000, windowHours: 5 },
-  pro: { peakMultiplier: 1.5, session: 44_000, weekly: 350_000, windowHours: 5 },
+  max20: { peakMultiplier: 1, session: 220_000, weekly: 2_000_000, windowHours: 5 },
+  max5: { peakMultiplier: 1, session: 88_000, weekly: 700_000, windowHours: 5 },
+  pro: { peakMultiplier: 1, session: 44_000, weekly: 350_000, windowHours: 5 },
 } as const;
 
 const planDefaults = () =>
@@ -92,7 +92,7 @@ export const recordUsage = async (params: {
 
   const now = new Date();
   const weightedTokens = rawTokens * peakMultiplier(now);
-  const costCents = Math.round((modelUsage.cost ?? 0) * COST_MARKUP() * 100);
+  const costCents = (modelUsage.cost ?? 0) * COST_MARKUP() * 100;
 
   const eventModel = new UsageEventModel(db, userId);
   await eventModel.insert({

@@ -3,7 +3,6 @@
 import { cx, useTheme } from 'antd-style';
 import { memo, useState } from 'react';
 
-import { getThreshold } from '../utils';
 import { styles } from './styles';
 
 interface WeeklyBarChartProps {
@@ -16,20 +15,13 @@ const WeeklyBarChart = memo<WeeklyBarChartProps>(({ data, sessionLimit }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const maxTokens = Math.max(...data.map((d) => d.tokens), 1);
-
-  const thresholdColor = (pct: number) => {
-    const t = getThreshold(pct);
-    if (t === 'danger') return token.colorError;
-    if (t === 'warn') return token.colorWarning;
-    return token.colorSuccess;
-  };
+  const barColor = token.colorInfo;
 
   return (
     <div className={styles.barChart} onMouseLeave={() => setHoveredIndex(null)}>
       {data.map((item, index) => {
         const heightPct = (item.tokens / maxTokens) * 100;
         const pct = Math.min(100, Math.round((item.tokens / sessionLimit) * 100));
-        const color = thresholdColor(pct);
         const isHovered = hoveredIndex === index;
         const isNeighbor = hoveredIndex !== null && Math.abs(index - hoveredIndex) === 1;
         const isAnyHovered = hoveredIndex !== null;
@@ -55,7 +47,7 @@ const WeeklyBarChart = memo<WeeklyBarChartProps>(({ data, sessionLimit }) => {
             <div
               className={styles.bar}
               style={{
-                background: color,
+                background: barColor,
                 height: `${heightPct}%`,
                 minHeight: 2,
                 opacity,

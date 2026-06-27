@@ -1,4 +1,4 @@
-import { index, integer, pgTable, text } from 'drizzle-orm/pg-core';
+import { doublePrecision, index, integer, pgTable, text } from 'drizzle-orm/pg-core';
 
 import { idGenerator } from '../utils/idGenerator';
 import { timestamptz } from './_helpers';
@@ -21,7 +21,7 @@ export const usageEvents = pgTable(
     weightedTokens: integer('weighted_tokens').notNull(),
     rawInput: integer('raw_input'),
     rawOutput: integer('raw_output'),
-    costCents: integer('cost_cents'),
+    costCents: doublePrecision('cost_cents'),
   },
   (t) => [index('usage_events_user_time_idx').on(t.userId, t.occurredAt)],
 );
